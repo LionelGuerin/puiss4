@@ -1,23 +1,27 @@
-// src/game/interfaces/game.interface.ts
+import { Request } from 'express';
 
-// 1. Les Couleurs des joueurs
+// 1. Enums pour éviter les fautes de frappe
 export enum PlayerColor {
   RED = 'RED',
   YELLOW = 'YELLOW',
 }
 
-// 2. Les Statuts possibles de la partie
 export enum GameStatus {
-  WAITING = 'WAITING', // En attente (si tu gères un lobby plus tard)
-  IN_PROGRESS = 'PLAYING', // Partie en cours
-  ENDED = 'ENDED', // Partie finie
+  WAITING = 'WAITING',
+  PLAYING = 'PLAYING', // ISO avec ton code Express
+  ENDED = 'ENDED',
 }
 
-// 3. Le contrat de réponse pour ton Front React (DTO)
-export interface GameResponse {
-  id: string;
+// 2. Extension de l'objet Request pour TypeScript (middleware auth)
+export interface RequestWithPlayer extends Request {
+  playerId?: string;
+}
+
+// 3. Payload envoyé via WebSocket
+export interface GamePayload {
+  roomId: string;
+  board: (PlayerColor | null)[][];
   turn: PlayerColor;
   status: GameStatus;
   winner: string | null;
-  board: (PlayerColor | null)[][];
 }
