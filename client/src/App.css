@@ -1,0 +1,126 @@
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #f0f2f5;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  height: 100vh;
+}
+
+.app-container {
+  margin-top: 10px;
+  text-align: center;
+  background: white;
+  padding: 10px 20px;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+h1 {
+  margin-bottom: 10px;
+}
+
+.status {
+  font-size: 1.1rem;
+  margin-bottom: 15px;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(7, 70px);
+  gap: 6px;
+  justify-content: center;
+  background: #1e3d58;
+  padding: 10px;
+  border-radius: 12px;
+  margin: 10px auto;
+}
+
+.cell {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: #f8f8f8;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.cell.yellow {
+  background: radial-gradient(circle at 30% 30%, #fff8a3, #ffd500);
+}
+
+.cell.red {
+  background: radial-gradient(circle at 30% 30%, #ffbaba, #ff3333);
+}
+
+.controls {
+  display: flex;
+  justify-content: center;
+  margin-top: 15px;
+}
+
+.controls button {
+  width: 70px;
+  height: 35px;
+  margin: 0 3px;
+  border: none;
+  border-radius: 6px;
+  background: #1e3d58;
+  color: white;
+  font-size: 20px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.controls button:hover:not(:disabled) {
+  background: #29577d;
+}
+
+.controls button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Boutons généraux */
+button {
+  padding: 10px 20px;
+  margin-left: 10px;
+  border: none;
+  border-radius: 8px;
+  background-color: #4caf50; /* Vert agréable */
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+button:hover {
+  background-color: #45a049;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+}
+
+button:disabled {
+  background-color: #aaa;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Bouton Download spécifique */
+button.download-btn {
+  margin: auto;
+  width: 100%;
+  background-color: #2196f3; /* Bleu */
+}
+
+button.download-btn:hover {
+  background-color: #1e88e5;
+}
+
+.status p {
+  margin: 5px 0;
+}
+.status h2 {
+  margin: 10px 0;
+}
