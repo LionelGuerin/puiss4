@@ -1,0 +1,33 @@
+# Saas Linter Options
+options:
+  # Don't merge default rules
+  merge-default-rules: false
+  # Set the formatter to 'html'
+  formatter: html
+  # Output file instead of logging results
+  output-file: 'linters/sass-lint.html'
+# File Options
+files:
+  include: '**/*.scss'
+
+# Rule Configuration
+rules:
+  extends-before-mixins: 2
+  extends-before-declarations: 2
+  placeholder-in-extend: 2
+  no-duplicate-properties: 1
+  no-warn: 1
+  no-debug: 1
+  no-important: 0
+
+  hex-notation:
+    - 2
+    - style: uppercase
+
+  indentation:
+    - 1
+    - size: tab
+
+  empty-line-between-blocks:
+    include: true
+    allow-single-line-rulesets: true
