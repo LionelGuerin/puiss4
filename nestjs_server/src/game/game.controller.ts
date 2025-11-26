@@ -7,6 +7,7 @@ import {
   Res,
   HttpStatus,
   HttpException,
+  Param,
 } from '@nestjs/common';
 import { GameService } from './game.service';
 import { PlayerColor, GameStatus } from './interfaces/game.interface';
@@ -136,9 +137,9 @@ export class GameController {
       // TypeScript accepte maintenant playerId car il est garanti "string"
       const player = await this.gameService.findPlayer(playerId);
       const room = await this.gameService.findRoom(roomId);
-
+      console.log('Debug Move:', { playerId, roomId, column });
       // 3. Validations Métier (Strictement ISO avec ton code Express)
-
+      console.log('Player:', player, 'Room:', room);
       // Vérif Joueur et Room
       if (!player || !player.roomId || player.roomId !== roomId) {
         throw new HttpException(
@@ -286,5 +287,30 @@ export class GameController {
       name: p.name,
       exists: true,
     };
+  }
+
+  @Get('room/:id') // GET /room/:id
+  async getRoomState(@Param('id') id: string) {
+    try {
+      const roomData = await this.gameService.getRoomIso(id);
+
+      if (!roomData) {
+        // Remplacement du return res.status(404).json({...}) d'Express
+        throw new HttpException(
+          { error: 'Room not found' },
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      // Remplacement du res.json({...}) d'Express
+      return roomData;
+    } catch (err) {
+      console.error(err);
+      // Remplacement du res.status(500).json({...}) d'Express
+      throw new HttpException(
+        { error: 'Server error' },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 }

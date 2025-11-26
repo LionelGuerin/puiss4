@@ -218,4 +218,36 @@ export class GameService {
 
     return payload;
   }
+
+  /**
+   * Récupère l'état complet d'une room au format ISO pour le client.
+   * Remplace la route Express router.get("/room/:id").
+   */
+  async getRoomIso(roomId: string) {
+    // 1. Récupération DB (inclut la relation winnerPlayer pour avoir le nom)
+    const room = await this.roomModel.findByPk(roomId, {
+      include: [
+        {
+          model: this.playerModel,
+          as: 'winnerPlayer', // Ton alias défini dans Room
+          attributes: ['id', 'name', 'color'],
+        },
+      ],
+    });
+
+    if (!room) return null;
+
+    // 2. Logique makeBoard
+    const board = await this.makeBoard(room.id);
+
+    // 3. Formatage ISO (identique à ton res.json Express)
+    return {
+      id: room.id,
+      turn: room.turn,
+      status: room.status,
+      // Utilisation de winnerPlayer pour accéder au nom, sinon null
+      winner: room.winnerPlayer ? room.winnerPlayer.name : null,
+      board,
+    };
+  }
 }

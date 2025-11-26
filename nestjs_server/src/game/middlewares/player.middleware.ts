@@ -11,15 +11,26 @@ interface RequestWithCookies extends RequestWithPlayer {
 
 @Injectable()
 export class PlayerMiddleware implements NestMiddleware {
-  // On utilise notre nouvelle interface RequestWithCookies
   use(req: RequestWithCookies, res: Response, next: NextFunction) {
-    // CORRECTION : Le linter n'a plus besoin de "any"
     const existingPlayerId = req.cookies?.playerId;
-
+    console.log(
+      'Middleware - Existing Player ID from cookies:',
+      existingPlayerId,
+    );
     if (!existingPlayerId) {
-      // ... (le reste du code est inchangé)
       const newPlayerId = uuidv4();
-      res.cookie('playerId', newPlayerId, { httpOnly: true });
+
+      // --- CORRECTION APPLIQUÉE ICI ---
+      res.cookie('playerId', newPlayerId, {
+        httpOnly: true,
+        path: '/', // Le cookie sera envoyé pour tous les chemins
+        maxAge: 1000 * 60 * 60 * 24 * 365, // Expire dans 1 an (pour la persistance)
+        // Si vous testez en localhost, SameSite: 'Lax' est souvent suffisant.
+        // Si vous rencontrez des problèmes, essayez 'None' + secure: true (uniquement en HTTPS)
+        sameSite: 'lax',
+      });
+      // --------------------------------
+
       req.playerId = newPlayerId;
     } else {
       req.playerId = existingPlayerId;
