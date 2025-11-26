@@ -4,6 +4,7 @@ import { GameModule } from './game/game.module';
 import { Room } from './game/models/room.model';
 import { Player } from './game/models/player.model';
 import { Cell } from './game/models/cell.model';
+import { PdfModule } from './pdf/pdf.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { Cell } from './game/models/cell.model';
       synchronize: true, // Met à TRUE pour le dev, ça créera les tables automatiquement
     }),
     GameModule,
+    PdfModule,
   ],
 })
 export class AppModule {}

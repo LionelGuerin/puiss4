@@ -12,6 +12,7 @@ import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
   imports: [SequelizeModule.forFeature([Room, Player, Cell])],
   controllers: [GameController],
   providers: [GameService, GameGateway],
+  exports: [GameGateway], // <--- NOUVEAU : Exporter le Gateway
 })
 export class GameModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

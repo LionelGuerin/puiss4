@@ -8,7 +8,7 @@ async function bootstrap() {
 
   // NOUVELLE CONFIGURATION CORS (Cruciale pour les cookies)
   app.enableCors({
-    origin: 'http://localhost:5173', // <--- Remplace par l'URL de ton FRONTEND (ex: 3001, 8080)
+    origin: '*', // <--- Remplace par l'URL de ton FRONTEND (ex: 3001, 8080)
     credentials: true, // <--- OBLIGATOIRE pour accepter les cookies
   });
 

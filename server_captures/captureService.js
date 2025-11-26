@@ -15,18 +15,19 @@ export async function captureRoomPDF(roomId, outputPath) {
       width: 595,
       height: 842
     });
-
+    console.log(`Navigating to ${FRONT_URL}/room/${roomId} to capture PDF...`);
     await page.goto(`${FRONT_URL}/room/${roomId}`, {
       waitUntil: "networkidle0"
     });
 
+    console.log(`Generating PDF for room ${roomId}...`);
     await page.pdf({
       path: outputPath,
       format: "A4",
       printBackground: true
     });
 
-    console.log(`PDF captured for room ${roomId} at ${outputPath}`);
+    console.log(`aaaaa PDF captured for room ${roomId} at ${outputPath}`);
   } finally {
     await browser.close();
   }

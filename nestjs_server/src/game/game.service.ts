@@ -11,6 +11,7 @@ import {
   GamePayload,
 } from './interfaces/game.interface';
 import { GameGateway } from './game.gateway';
+import * as amqp from 'amqplib';
 
 @Injectable()
 export class GameService {
@@ -193,6 +194,7 @@ export class GameService {
       room.status = GameStatus.ENDED;
       room.winnerPlayerId = player.id; // On stocke l'ID
       // Note: notifyGameEnded était juste un log ou un emit dans Express
+      await this.notifyGameEnded(room.id);
       this.logger.log(`Game ${room.id} ended. Winner: ${player.name}`);
     } else {
       room.turn =
@@ -249,5 +251,43 @@ export class GameService {
       winner: room.winnerPlayer ? room.winnerPlayer.name : null,
       board,
     };
+  }
+
+  /**
+   * Envoie un message à RabbitMQ pour indiquer qu'un PDF doit être capturé.
+   * Remplace l'ancienne fonction utilitaire.
+   */
+  async notifyGameEnded(roomId: string): Promise<void> {
+    const AMQP_URL = 'amqp://localhost'; // Déplacer ceci vers une variable d'environnement (.env) est conseillé
+    const QUEUE_NAME = 'game_ended';
+
+    try {
+      const conn = await amqp.connect(AMQP_URL);
+      const ch = await conn.createChannel();
+
+      // Assurer que la queue existe
+      await ch.assertQueue(QUEUE_NAME, { durable: true });
+
+      const message = { roomId };
+
+      ch.sendToQueue(
+        QUEUE_NAME,
+        Buffer.from(JSON.stringify(message)),
+        { persistent: true }, // Message persistant
+      );
+
+      this.logger.log(
+        `[AMQP] Message for Room ${roomId} sent to queue '${QUEUE_NAME}'`,
+      );
+
+      await ch.close();
+      await conn.close();
+    } catch (error) {
+      this.logger.error(
+        `[AMQP] Failed to connect or send message for Room ${roomId}`,
+        error,
+      );
+      // Important: Le reste du jeu ne doit pas s'arrêter si RabbitMQ est hors ligne
+    }
   }
 }

@@ -313,4 +313,19 @@ export class GameController {
       );
     }
   }
+
+  @Post('pdf/:id') // POST /pdf/:id
+  async callPdfGeneration(@Param('id') id: string) {
+    try {
+      await this.gameService.notifyGameEnded(id);
+      return { success: true };
+    } catch (err) {
+      console.error(err);
+      // Remplacement du res.status(500).json({...}) d'Express
+      throw new HttpException(
+        { error: 'Server error' },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
 }
