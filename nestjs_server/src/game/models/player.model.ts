@@ -6,25 +6,22 @@ import {
   ForeignKey,
   BelongsTo,
 } from 'sequelize-typescript';
-import { Room } from './room.model'; // On importe Room pour faire le lien
+import { Room } from './room.model';
 
-@Table({ tableName: 'Players' })
+@Table({ tableName: 'Players', timestamps: true }) // timestamps true si ton Express utilisait createdAt/updatedAt par défaut
 export class Player extends Model {
-  // INDISPENSABLE car tes IDs ne sont pas des nombres 1, 2, 3
   @Column({ primaryKey: true, type: DataType.STRING })
   declare id: string;
 
-  @Column({ type: DataType.STRING })
-  declare name: string; // Nécessaire pour ton retour API (winner.name)
+  @Column({ type: DataType.STRING, allowNull: false })
+  declare name: string;
 
-  @Column(DataType.ENUM('RED', 'YELLOW'))
-  declare color: string;
+  @Column({ type: DataType.ENUM('RED', 'YELLOW'), allowNull: true })
+  declare color: string | null;
 
-  // Relation : Un joueur appartient à une Room (via roomId)
-  // C'est ce qu'on voyait dans ta colonne 'roomId' sur la capture
   @ForeignKey(() => Room)
-  @Column({ type: DataType.STRING })
-  declare roomId: string;
+  @Column({ type: DataType.STRING, allowNull: true })
+  declare roomId: string | null;
 
   @BelongsTo(() => Room)
   declare room: Room;

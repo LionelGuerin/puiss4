@@ -1,36 +1,34 @@
 import {
+  Table,
   Column,
   Model,
-  Table,
   DataType,
-  BelongsTo,
-  ForeignKey,
   HasMany,
+  ForeignKey,
+  BelongsTo,
 } from 'sequelize-typescript';
 import { Player } from './player.model';
 import { Cell } from './cell.model';
 
-@Table({ tableName: 'Rooms' }) // Nom exact de ta table en DB
+@Table({ tableName: 'Rooms', timestamps: true })
 export class Room extends Model {
-  // INDISPENSABLE car tes IDs ne sont pas des nombres 1, 2, 3
   @Column({ primaryKey: true, type: DataType.STRING })
   declare id: string;
 
   @Column(DataType.ENUM('RED', 'YELLOW'))
   declare turn: string;
 
-  @Column(DataType.ENUM('WAITING', 'IN_PROGRESS', 'ENDED'))
+  @Column(DataType.ENUM('WAITING', 'PLAYING', 'ENDED'))
   declare status: string;
 
+  // On suit ton code Express : la colonne s'appelle winnerPlayerId
   @ForeignKey(() => Player)
   @Column({ type: DataType.STRING, allowNull: true })
-  declare winnerPlayerId: string;
+  declare winnerPlayerId: string | null;
 
-  // Relation : Une Room "appartient" à un Winner (qui est un Player)
   @BelongsTo(() => Player, 'winnerPlayerId')
-  declare winner: Player;
+  declare winnerPlayer: Player;
 
-  // Relation : Une Room a plusieurs Cells
   @HasMany(() => Cell)
   declare cells: Cell[];
 }
