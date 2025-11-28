@@ -12,6 +12,7 @@ import {
 } from './interfaces/game.interface';
 import { GameGateway } from './game.gateway';
 import * as amqp from 'amqplib';
+import { SseService } from '../sse/sse.service';
 
 @Injectable()
 export class GameService {
@@ -23,6 +24,7 @@ export class GameService {
     @InjectModel(Cell) private cellModel: typeof Cell,
     @Inject(Sequelize) private sequelize: Sequelize,
     private gameGateway: GameGateway,
+    private SseService: SseService,
   ) {}
 
   // =================================================================
@@ -216,7 +218,9 @@ export class GameService {
     };
 
     // 5. Notifier via Gateway
-    this.gameGateway.emitBoardUpdate(room.id, payload);
+    // this.gameGateway.emitBoardUpdate(room.id, payload);
+    // Tu injectes SseService au lieu de GameGateway
+    this.SseService.emitToRoom(room.id, 'board_update', payload);
 
     return payload;
   }

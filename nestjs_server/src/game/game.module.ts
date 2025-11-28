@@ -7,12 +7,14 @@ import { Player } from './models/player.model';
 import { Cell } from './models/cell.model';
 import { PlayerMiddleware } from './middlewares/player.middleware';
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
+import { SseController } from '../sse/sse.controller';
+import { SseService } from '../sse/sse.service';
 
 @Module({
   imports: [SequelizeModule.forFeature([Room, Player, Cell])],
-  controllers: [GameController],
-  providers: [GameService, GameGateway],
-  exports: [GameGateway], // <--- NOUVEAU : Exporter le Gateway
+  controllers: [GameController, SseController],
+  providers: [GameService, GameGateway, SseService],
+  exports: [GameGateway, SseService], // <--- NOUVEAU : Exporter le Gateway
 })
 export class GameModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

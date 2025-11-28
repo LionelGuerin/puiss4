@@ -4,15 +4,13 @@ import io from "socket.io-client";
 const socket = io("http://localhost:4000", { transports: ["websocket"] });
 
 export function useRoom(roomId) {
-  const [board, setBoard] = useState(
-    Array.from({ length: 6 }, () => Array.from({ length: 7 }, () => null))
-  );
+  const [board, setBoard] = useState(Array.from({ length: 6 }, () => Array.from({ length: 7 }, () => null)));
   const [room, setRoom] = useState(null);
   const [loading, setLoading] = useState(true);
   const [pdfReady, setPdfReady] = useState(false);
 
   useEffect(() => {
-    const handlePDFReady = (payload) => {
+    const handlePDFReady = payload => {
       if (payload.roomId === roomId) {
         console.log(`PDF ready for room ${roomId}`);
         setPdfReady(true);
@@ -21,6 +19,36 @@ export function useRoom(roomId) {
 
     socket.on("pdf_ready", handlePDFReady);
     return () => socket.off("pdf_ready", handlePDFReady);
+  }, [roomId]);
+
+  useEffect(() => {
+    // Connexion simple via URL
+    const eventSource = new EventSource(`http://localhost:4000/sse/${roomId}`);
+
+    // Écoute de l'événement nommé 'board_update'
+    eventSource.addEventListener("board_update", event => {
+      const payload = JSON.parse(event.data);
+      console.log("Mise à jour reçue :", payload);
+      setBoard(payload.board);
+      setRoom(prev => ({
+        ...prev,
+        id: roomId,
+        turn: payload.turn,
+        status: payload.status,
+        winner: payload.winner || null
+      }));
+    });
+
+    // Gestion des erreurs (reconnexion automatique native)
+    eventSource.onerror = err => {
+      console.error("Erreur SSE", err);
+      eventSource.close();
+    };
+
+    // Nettoyage au démontage du composant
+    return () => {
+      eventSource.close();
+    };
   }, [roomId]);
 
   useEffect(() => {
@@ -60,16 +88,16 @@ export function useRoom(roomId) {
 
   useEffect(() => {
     if (!roomId) return;
-    const handleUpdate = (payload) => {
+    const handleUpdate = payload => {
       if (payload.roomId !== roomId) return;
       console.log("Received update for room:", payload);
       setBoard(payload.board);
-      setRoom((prev) => ({
+      setRoom(prev => ({
         ...prev,
         id: roomId,
         turn: payload.turn,
         status: payload.status,
-        winner: payload.winner || null,
+        winner: payload.winner || null
       }));
     };
     socket.on("board_update", handleUpdate);
