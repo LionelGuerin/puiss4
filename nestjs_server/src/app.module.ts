@@ -1,22 +1,44 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config'; // <--- IMPORTS
 import { SequelizeModule } from '@nestjs/sequelize';
+
+// Modules
 import { GameModule } from './game/game.module';
+import { PdfModule } from './pdf/pdf.module';
+
+// Modèles
 import { Room } from './game/models/room.model';
 import { Player } from './game/models/player.model';
 import { Cell } from './game/models/cell.model';
-import { PdfModule } from './pdf/pdf.module';
 
 @Module({
   imports: [
-    SequelizeModule.forRoot({
-      dialect: 'sqlite', // <--- IMPORTANT : sqlite
-      storage: 'database.sqlite', // Le nom du fichier qui sera créé à la racine
-      models: [Room, Player, Cell], // Tes modèles
-      autoLoadModels: true,
-      synchronize: true, // Met à TRUE pour le dev, ça créera les tables automatiquement
+    // 1. ConfigModule (Déjà là)
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env',
     }),
+
+    // 2. Base de données ASYNCHRONE
+    // On change forRoot en forRootAsync
+    SequelizeModule.forRootAsync({
+      imports: [ConfigModule], // On importe ConfigModule pour l'utiliser ici
+      inject: [ConfigService], // On injecte le service
+      useFactory: (configService: ConfigService) => ({
+        dialect: 'sqlite',
+        storage: 'database.sqlite',
+        models: [Room, Player, Cell],
+        autoLoadModels: true,
+        logging: false,
+        synchronize: configService.get<string>('DEV_MODE') === 'true',
+      }),
+    }),
+
+    // 3. Modules Métier
     GameModule,
     PdfModule,
   ],
+  controllers: [],
+  providers: [],
 })
 export class AppModule {}

@@ -1,22 +1,23 @@
 import { Injectable, Logger } from '@nestjs/common';
-import * as fs from 'fs'; // Node.js File System
-import * as path from 'path'; // Pour gérer les chemins
+import { ConfigService } from '@nestjs/config'; // <--- IMPORT
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class PdfService {
   private readonly logger = new Logger(PdfService.name);
+  private readonly PDF_EXPORT_DIR: string;
 
-  // NOTE: Dans un projet Node/NestJS compilé, le chemin est souvent relatif
-  // au répertoire de travail (process.cwd()) ou à __dirname de la source compilée.
-  // On utilise process.cwd() pour la stabilité.
-  private readonly PDF_EXPORT_DIR = path.resolve(
-    process.cwd(),
-    '..',
-    'pdf_exports',
-  );
+  constructor(private configService: ConfigService) {
+    // 1. Récupérer le chemin relatif depuis .env
+    const relativePath =
+      this.configService.get<string>('PDF_EXPORT_RELATIVE_PATH') ||
+      '../pdf_exports';
 
-  constructor() {
-    // S'assurer que le dossier d'export existe au démarrage
+    // 2. Résoudre le chemin absolu
+    this.PDF_EXPORT_DIR = path.resolve(process.cwd(), relativePath);
+
+    // 3. Création du dossier si inexistant
     if (!fs.existsSync(this.PDF_EXPORT_DIR)) {
       fs.mkdirSync(this.PDF_EXPORT_DIR, { recursive: true });
       this.logger.log(`Created PDF export directory: ${this.PDF_EXPORT_DIR}`);
