@@ -18,24 +18,26 @@ import { Room } from './models/room.model';
 import { Player } from './models/player.model';
 import { Cell } from './models/cell.model';
 
+// IMPORTS DTO
+import { StartGameDto } from './dto/start-game.dto';
+import { MakeMoveDto } from './dto/make-move.dto';
+
 @Controller()
 export class GameController {
   constructor(private readonly gameService: GameService) {}
 
+  // ----------------------------------------------------------------------
+  // ROUTE POST /start
+  // ----------------------------------------------------------------------
   @Post('start')
-  async start(@Body() body: { name: string }, @Req() req: RequestWithPlayer) {
-    const { name } = body;
-    const playerId = req.playerId || uuidv4(); // Récupère du middleware ou génère
+  // On utilise le DTO ici. NestJS validera automatiquement le body avant d'entrer dans la fonction.
+  async start(@Body() dto: StartGameDto, @Req() req: RequestWithPlayer) {
+    const { name } = dto; // Les données sont garanties valides ici
+    const playerId = req.playerId || uuidv4();
 
-    if (!name || name.trim() === '') {
-      throw new HttpException(
-        { error: 'Name required' },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    // 1. Gestion du Joueur (Création ou Mise à jour)
+    // 1. Gestion du Joueur
     let player = await this.gameService.findPlayer(playerId);
+
     if (!player) {
       player = await this.gameService.createPlayer({
         id: playerId,
@@ -48,20 +50,19 @@ export class GameController {
       await player.save();
     }
 
-    // 2. Gestion de l'ancienne room (Nettoyage)
+    // 2. Nettoyage ancienne room
     if (player.roomId) {
       const oldRoom = await this.gameService.findRoom(player.roomId);
       player.roomId = null;
       player.color = null;
       await player.save();
 
-      // Assertion de type pour status car DB string vs Enum strict
       if (oldRoom && (oldRoom.status as GameStatus) === GameStatus.ENDED) {
         await this.gameService.destroyRoom(oldRoom.id);
       }
     }
 
-    // 3. Logique de Matchmaking (Trouver une room avec 1 joueur)
+    // 3. Matchmaking
     const roomEntry = await this.gameService.findRoomWithOnePlayer();
     const roomWithOnePlayerId = roomEntry?.roomId || null;
 
@@ -71,13 +72,13 @@ export class GameController {
     }
 
     if (!room) {
-      // CAS 1 : Créer une nouvelle room (WAITING)
+      // Création
       const roomId = uuidv4();
       room = await this.gameService.createRoom({
         id: roomId,
         turn: PlayerColor.YELLOW,
         status: GameStatus.WAITING,
-        winnerPlayerId: null, // TypeScript accepte null ici maintenant
+        winnerPlayerId: null,
       });
 
       player.roomId = room.id;
@@ -91,10 +92,8 @@ export class GameController {
         status: GameStatus.WAITING,
       };
     } else {
-      // CAS 2 : Rejoindre une room existante (Jumelage)
+      // Rejoindre
       const otherPlayer = await this.gameService.findPlayerInRoom(room.id);
-
-      // Assigner la couleur opposée
       const myColor =
         otherPlayer && otherPlayer.color === PlayerColor.YELLOW
           ? PlayerColor.RED
@@ -114,18 +113,15 @@ export class GameController {
     }
   }
 
+  // ----------------------------------------------------------------------
+  // ROUTE POST /move
+  // ----------------------------------------------------------------------
   @Post('move')
-  async move(
-    @Body() body: { roomId: string; column: number },
-    @Req() req: RequestWithPlayer,
-  ) {
+  async move(@Body() dto: MakeMoveDto, @Req() req: RequestWithPlayer) {
     try {
-      const { roomId, column } = body;
-      const playerId = req.playerId; // Type ici : string | undefined
+      const { roomId, column } = dto; // Typé et validé !
+      const playerId = req.playerId;
 
-      // 1. SÉCURITÉ TYPESCRIPT CRUCIALE
-      // On vérifie immédiatement que l'ID est présent.
-      // Cela transforme le type de playerId de 'string | undefined' à 'string' pour la suite.
       if (!playerId) {
         throw new HttpException(
           { error: 'Player ID missing' },
@@ -133,14 +129,7 @@ export class GameController {
         );
       }
 
-      // 2. Récupération des données via le Service
-      // TypeScript accepte maintenant playerId car il est garanti "string"
       const player = await this.gameService.findPlayer(playerId);
-      const room = await this.gameService.findRoom(roomId);
-      console.log('Debug Move:', { playerId, roomId, column });
-      // 3. Validations Métier (Strictement ISO avec ton code Express)
-      console.log('Player:', player, 'Room:', room);
-      // Vérif Joueur et Room
       if (!player || !player.roomId || player.roomId !== roomId) {
         throw new HttpException(
           { error: 'Not in room' },
@@ -148,20 +137,16 @@ export class GameController {
         );
       }
 
-      // Vérif Existence Room
+      const room = await this.gameService.findRoom(roomId);
       if (!room) {
         throw new HttpException(
           { error: 'Room not found' },
           HttpStatus.NOT_FOUND,
         );
       }
-
-      // Vérif Status (On cast 'as GameStatus' car Sequelize renvoie une string brute)
       if ((room.status as GameStatus) === GameStatus.ENDED) {
         throw new HttpException({ error: 'Ended' }, HttpStatus.BAD_REQUEST);
       }
-
-      // Vérif Tour
       if (player.color !== room.turn) {
         throw new HttpException(
           { error: 'Not your turn' },
@@ -169,29 +154,18 @@ export class GameController {
         );
       }
 
-      // 4. Exécution de la logique de jeu
-      // Cette méthode dans le service gère la gravité, la victoire, la sauvegarde DB et le WebSocket.
       await this.gameService.processMove(room, player, column);
 
       return { success: true };
     } catch (err: unknown) {
-      // 'unknown' est plus propre que 'any' en TS strict
       console.error('Move error', err);
-
-      // 1. SÉCURITÉ : On vérifie si c'est bien une instance d'Error avant de lire .message
       if (err instanceof Error && err.message === 'Column full') {
         throw new HttpException(
           { error: 'Column full' },
           HttpStatus.BAD_REQUEST,
         );
       }
-
-      // 2. Si c'est déjà une HttpException (levée par nos validations plus haut), on la laisse passer
-      if (err instanceof HttpException) {
-        throw err;
-      }
-
-      // 3. Cas par défaut (Erreur serveur inconnue)
+      if (err instanceof HttpException) throw err;
       throw new HttpException(
         { error: 'Server error' },
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -199,13 +173,16 @@ export class GameController {
     }
   }
 
+  // ----------------------------------------------------------------------
+  // ROUTE POST /reset
+  // ----------------------------------------------------------------------
   @Post('reset')
   async reset() {
     try {
       await this.gameService.resetAll();
       return { success: true, message: 'Database reset complete' };
     } catch (err) {
-      console.error(err);
+      console.error('Reset error', err);
       throw new HttpException(
         { error: 'Database reset failed' },
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -213,11 +190,61 @@ export class GameController {
     }
   }
 
+  // ----------------------------------------------------------------------
+  // ROUTE GET /me
+  // ----------------------------------------------------------------------
+  @Get('me')
+  async getMe(@Req() req: RequestWithPlayer) {
+    const playerId = req.playerId;
+    if (!playerId)
+      throw new HttpException(
+        { error: 'Unauthorized' },
+        HttpStatus.UNAUTHORIZED,
+      );
+
+    const p = await this.gameService.findPlayer(playerId);
+    if (!p) return { id: playerId, exists: false };
+
+    return {
+      id: p.id,
+      color: p.color,
+      roomId: p.roomId,
+      name: p.name,
+      exists: true,
+    };
+  }
+
+  // ----------------------------------------------------------------------
+  // ROUTE GET /room/:id
+  // ----------------------------------------------------------------------
+  @Get('room/:id')
+  async getRoomState(@Param('id') id: string) {
+    // Note: Pour récupérer l'ID, on utilise @Param('id') id: string
+    // J'ai corrigé ci-dessous pour inclure Param
+    try {
+      const roomData = await this.gameService.getRoomIso(id);
+      if (!roomData)
+        throw new HttpException(
+          { error: 'Room not found' },
+          HttpStatus.NOT_FOUND,
+        );
+      return roomData;
+    } catch (err) {
+      console.error('Get room error', err);
+      throw new HttpException(
+        { error: 'Server error' },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  // ----------------------------------------------------------------------
+  // ROUTE GET /debug/html
+  // ----------------------------------------------------------------------
   @Get('debug/html')
   async debugHtml(@Res() res: Response) {
-    // data contient { players: Player[], rooms: Room[], cells: Cell[] }
     const data = await this.gameService.getAllData();
-
+    // ... (Ton code HTML ici, inchangé pour la lisibilité)
     const html = `
       <html>
         <head>
@@ -253,79 +280,5 @@ export class GameController {
       </html>
     `;
     res.send(html);
-  }
-
-  @Get('me') // GET /me
-  async getMe(@Req() req: RequestWithPlayer) {
-    // La propriété playerId est maintenant garantie par le PlayerMiddleware
-    const playerId = req.playerId;
-
-    // Sécurité: Si le middleware a raté, on renvoie une erreur
-    if (!playerId) {
-      throw new HttpException(
-        { error: 'Player ID missing' },
-        HttpStatus.UNAUTHORIZED,
-      );
-    }
-
-    // On utilise le find de notre GameService
-    const p = await this.gameService.findPlayer(playerId);
-
-    if (!p) {
-      // Le joueur n'existe pas encore dans la base de données (première visite)
-      return {
-        id: playerId,
-        exists: false,
-      };
-    }
-
-    // Le joueur existe
-    return {
-      id: p.id,
-      color: p.color,
-      roomId: p.roomId,
-      name: p.name,
-      exists: true,
-    };
-  }
-
-  @Get('room/:id') // GET /room/:id
-  async getRoomState(@Param('id') id: string) {
-    try {
-      const roomData = await this.gameService.getRoomIso(id);
-
-      if (!roomData) {
-        // Remplacement du return res.status(404).json({...}) d'Express
-        throw new HttpException(
-          { error: 'Room not found' },
-          HttpStatus.NOT_FOUND,
-        );
-      }
-
-      // Remplacement du res.json({...}) d'Express
-      return roomData;
-    } catch (err) {
-      console.error(err);
-      // Remplacement du res.status(500).json({...}) d'Express
-      throw new HttpException(
-        { error: 'Server error' },
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-  }
-
-  @Post('pdf/:id') // POST /pdf/:id
-  async callPdfGeneration(@Param('id') id: string) {
-    try {
-      await this.gameService.notifyGameEnded(id);
-      return { success: true };
-    } catch (err) {
-      console.error(err);
-      // Remplacement du res.status(500).json({...}) d'Express
-      throw new HttpException(
-        { error: 'Server error' },
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
   }
 }
