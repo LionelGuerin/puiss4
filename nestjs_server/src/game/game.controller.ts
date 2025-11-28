@@ -10,17 +10,18 @@ import {
   Param,
 } from '@nestjs/common';
 import { GameService } from './game.service';
-import { PlayerColor, GameStatus } from './interfaces/game.interface';
 import type { RequestWithPlayer } from './interfaces/game.interface';
 import { v4 as uuidv4 } from 'uuid';
 import type { Response } from 'express';
-import { Room } from './models/room.model';
-import { Player } from './models/player.model';
-import { Cell } from './models/cell.model';
 
-// IMPORTS DTO
+// DTOs
 import { StartGameDto } from './dto/start-game.dto';
 import { MakeMoveDto } from './dto/make-move.dto';
+
+// Modèles (Nécessaires pour le typage dans le HTML de debug)
+import { Player } from './models/player.model';
+import { Room } from './models/room.model';
+import { Cell } from './models/cell.model';
 
 @Controller()
 export class GameController {
@@ -30,87 +31,10 @@ export class GameController {
   // ROUTE POST /start
   // ----------------------------------------------------------------------
   @Post('start')
-  // On utilise le DTO ici. NestJS validera automatiquement le body avant d'entrer dans la fonction.
   async start(@Body() dto: StartGameDto, @Req() req: RequestWithPlayer) {
-    const { name } = dto; // Les données sont garanties valides ici
     const playerId = req.playerId || uuidv4();
-
-    // 1. Gestion du Joueur
-    let player = await this.gameService.findPlayer(playerId);
-
-    if (!player) {
-      player = await this.gameService.createPlayer({
-        id: playerId,
-        name,
-        color: null,
-        roomId: null,
-      });
-    } else {
-      player.name = name;
-      await player.save();
-    }
-
-    // 2. Nettoyage ancienne room
-    if (player.roomId) {
-      const oldRoom = await this.gameService.findRoom(player.roomId);
-      player.roomId = null;
-      player.color = null;
-      await player.save();
-
-      if (oldRoom && (oldRoom.status as GameStatus) === GameStatus.ENDED) {
-        await this.gameService.destroyRoom(oldRoom.id);
-      }
-    }
-
-    // 3. Matchmaking
-    const roomEntry = await this.gameService.findRoomWithOnePlayer();
-    const roomWithOnePlayerId = roomEntry?.roomId || null;
-
-    let room: Room | null = null;
-    if (roomWithOnePlayerId) {
-      room = await this.gameService.findRoom(roomWithOnePlayerId);
-    }
-
-    if (!room) {
-      // Création
-      const roomId = uuidv4();
-      room = await this.gameService.createRoom({
-        id: roomId,
-        turn: PlayerColor.YELLOW,
-        status: GameStatus.WAITING,
-        winnerPlayerId: null,
-      });
-
-      player.roomId = room.id;
-      player.color = PlayerColor.YELLOW;
-      await player.save();
-
-      return {
-        roomId: room.id,
-        color: PlayerColor.YELLOW,
-        turn: PlayerColor.YELLOW,
-        status: GameStatus.WAITING,
-      };
-    } else {
-      // Rejoindre
-      const otherPlayer = await this.gameService.findPlayerInRoom(room.id);
-      const myColor =
-        otherPlayer && otherPlayer.color === PlayerColor.YELLOW
-          ? PlayerColor.RED
-          : PlayerColor.YELLOW;
-
-      player.roomId = room.id;
-      player.color = myColor;
-      await player.save();
-
-      room.status = GameStatus.PLAYING;
-      await room.save();
-
-      return {
-        roomId: room.id,
-        color: player.color,
-      };
-    }
+    // Toute la logique de création/join est déléguée au service
+    return this.gameService.startGame(playerId, dto.name);
   }
 
   // ----------------------------------------------------------------------
@@ -118,54 +42,23 @@ export class GameController {
   // ----------------------------------------------------------------------
   @Post('move')
   async move(@Body() dto: MakeMoveDto, @Req() req: RequestWithPlayer) {
+    const playerId = req.playerId;
+    if (!playerId) {
+      throw new HttpException(
+        { error: 'Player ID missing' },
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+
     try {
-      const { roomId, column } = dto; // Typé et validé !
-      const playerId = req.playerId;
-
-      if (!playerId) {
-        throw new HttpException(
-          { error: 'Player ID missing' },
-          HttpStatus.UNAUTHORIZED,
-        );
-      }
-
-      const player = await this.gameService.findPlayer(playerId);
-      if (!player || !player.roomId || player.roomId !== roomId) {
-        throw new HttpException(
-          { error: 'Not in room' },
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-
-      const room = await this.gameService.findRoom(roomId);
-      if (!room) {
-        throw new HttpException(
-          { error: 'Room not found' },
-          HttpStatus.NOT_FOUND,
-        );
-      }
-      if ((room.status as GameStatus) === GameStatus.ENDED) {
-        throw new HttpException({ error: 'Ended' }, HttpStatus.BAD_REQUEST);
-      }
-      if (player.color !== room.turn) {
-        throw new HttpException(
-          { error: 'Not your turn' },
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-
-      await this.gameService.processMove(room, player, column);
-
+      // Le service gère les vérifications (Room, Tour, Victoire)
+      await this.gameService.makeMove(playerId, dto.roomId, dto.column);
       return { success: true };
-    } catch (err: unknown) {
-      console.error('Move error', err);
-      if (err instanceof Error && err.message === 'Column full') {
-        throw new HttpException(
-          { error: 'Column full' },
-          HttpStatus.BAD_REQUEST,
-        );
-      }
+    } catch (err: any) {
+      // On laisse passer les exceptions HTTP NestJS (BadRequest, NotFound...)
       if (err instanceof HttpException) throw err;
+
+      console.error(err);
       throw new HttpException(
         { error: 'Server error' },
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -178,16 +71,8 @@ export class GameController {
   // ----------------------------------------------------------------------
   @Post('reset')
   async reset() {
-    try {
-      await this.gameService.resetAll();
-      return { success: true, message: 'Database reset complete' };
-    } catch (err) {
-      console.error('Reset error', err);
-      throw new HttpException(
-        { error: 'Database reset failed' },
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
+    await this.gameService.resetAll();
+    return { success: true, message: 'Database reset complete' };
   }
 
   // ----------------------------------------------------------------------
@@ -202,7 +87,8 @@ export class GameController {
         HttpStatus.UNAUTHORIZED,
       );
 
-    const p = await this.gameService.findPlayer(playerId);
+    const p = await this.gameService.getPlayer(playerId);
+
     if (!p) return { id: playerId, exists: false };
 
     return {
@@ -219,23 +105,14 @@ export class GameController {
   // ----------------------------------------------------------------------
   @Get('room/:id')
   async getRoomState(@Param('id') id: string) {
-    // Note: Pour récupérer l'ID, on utilise @Param('id') id: string
-    // J'ai corrigé ci-dessous pour inclure Param
-    try {
-      const roomData = await this.gameService.getRoomIso(id);
-      if (!roomData)
-        throw new HttpException(
-          { error: 'Room not found' },
-          HttpStatus.NOT_FOUND,
-        );
-      return roomData;
-    } catch (err) {
-      console.error('Get room error', err);
+    const roomData = await this.gameService.getRoomIso(id);
+    if (!roomData) {
       throw new HttpException(
-        { error: 'Server error' },
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        { error: 'Room not found' },
+        HttpStatus.NOT_FOUND,
       );
     }
+    return roomData;
   }
 
   // ----------------------------------------------------------------------
@@ -244,9 +121,10 @@ export class GameController {
   @Get('debug/html')
   async debugHtml(@Res() res: Response) {
     const data = await this.gameService.getAllData();
-    // ... (Ton code HTML ici, inchangé pour la lisibilité)
+
+    // Votre HTML exact
     const html = `
-      <html>
+     <html>
         <head>
           <title>Debug Puissance 4</title>
           <style>

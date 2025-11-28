@@ -1,4 +1,10 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Room } from './models/room.model';
 import { Player } from './models/player.model';
@@ -11,6 +17,7 @@ import {
   GamePayload,
 } from './interfaces/game.interface';
 import { GameGateway } from './game.gateway';
+import { v4 as uuidv4 } from 'uuid';
 import * as amqp from 'amqplib';
 
 @Injectable()
@@ -26,56 +33,164 @@ export class GameService {
   ) {}
 
   // =================================================================
-  // MÉTHODES PUBLIQUES (WRAPPERS DB) - Pour le Contrôleur
+  // MÉTHODES PUBLIQUES DE JEU (APPELÉES PAR LE CONTROLEUR)
   // =================================================================
 
-  async findPlayer(id: string) {
-    // Si la recherche ne donne rien, Sequelize renvoie null
-    return this.playerModel.findByPk(id);
+  /**
+   * Gère toute la logique de connexion/création de partie
+   */
+  async startGame(playerId: string, playerName: string) {
+    // 1. Récupération ou création du joueur
+    let player = await this.playerModel.findByPk(playerId);
+    if (!player) {
+      player = await this.playerModel.create({
+        id: playerId,
+        name: playerName,
+        color: null,
+        roomId: null,
+      });
+    } else {
+      player.name = playerName;
+      await player.save();
+    }
+
+    // 2. Nettoyage si le joueur était déjà dans une partie finie
+    if (player.roomId) {
+      const oldRoom = await this.roomModel.findByPk(player.roomId);
+      player.roomId = null;
+      player.color = null;
+      await player.save();
+
+      if (oldRoom && (oldRoom.status as GameStatus) === GameStatus.ENDED) {
+        await this.roomModel.destroy({ where: { id: oldRoom.id } });
+      }
+    }
+
+    // 3. Matchmaking : Chercher une partie avec 1 seul joueur
+    const roomEntry = await this.findRoomWithOnePlayer();
+    const existingRoomId = roomEntry?.roomId;
+
+    let room: Room | null = null;
+    if (existingRoomId) {
+      room = await this.roomModel.findByPk(existingRoomId);
+    }
+
+    if (!room) {
+      // CAS A : Créer une nouvelle Room
+      const newRoomId = uuidv4();
+      room = await this.roomModel.create({
+        id: newRoomId,
+        turn: PlayerColor.YELLOW,
+        status: GameStatus.WAITING,
+        winnerPlayerId: null,
+      });
+
+      player.roomId = room.id;
+      player.color = PlayerColor.YELLOW;
+      await player.save();
+
+      return {
+        roomId: room.id,
+        color: PlayerColor.YELLOW,
+        turn: PlayerColor.YELLOW,
+        status: GameStatus.WAITING,
+      };
+    } else {
+      // CAS B : Rejoindre la Room existante
+      const opponent = await this.playerModel.findOne({
+        where: { roomId: room.id },
+      });
+      const myColor =
+        opponent && opponent.color === PlayerColor.YELLOW
+          ? PlayerColor.RED
+          : PlayerColor.YELLOW;
+
+      player.roomId = room.id;
+      player.color = myColor;
+      await player.save();
+
+      room.status = GameStatus.PLAYING;
+      await room.save();
+
+      return {
+        roomId: room.id,
+        color: player.color,
+      };
+    }
   }
 
-  async findRoom(id: string) {
-    return this.roomModel.findByPk(id);
+  /**
+   * Gère la logique d'un coup joué
+   */
+  async makeMove(playerId: string, roomId: string, column: number) {
+    const player = await this.playerModel.findByPk(playerId);
+    if (!player || player.roomId !== roomId) {
+      throw new BadRequestException('Not in room');
+    }
+
+    const room = await this.roomModel.findByPk(roomId);
+    if (!room) {
+      throw new NotFoundException('Room not found');
+    }
+    if ((room.status as GameStatus) === GameStatus.ENDED) {
+      throw new BadRequestException('Ended');
+    }
+    if (player.color !== room.turn) {
+      throw new BadRequestException('Not your turn');
+    }
+
+    // Exécution du coup (Logique interne)
+    return this.processMoveLogic(room, player, column);
   }
 
-  async createPlayer(data: Partial<Player>) {
-    return this.playerModel.create(data);
+  /**
+   * Récupère l'état complet de la room (ISO)
+   */
+  async getRoomIso(roomId: string): Promise<GamePayload | null> {
+    const room = await this.roomModel.findByPk(roomId, {
+      include: [
+        {
+          model: this.playerModel,
+          as: 'winnerPlayer',
+          attributes: ['id', 'name'],
+        },
+      ],
+    });
+
+    if (!room) return null;
+
+    const board = await this.makeBoard(room.id);
+
+    return {
+      roomId: room.id,
+      turn: room.turn as PlayerColor,
+      status: room.status as GameStatus,
+      winner: room.winnerPlayer ? room.winnerPlayer.name : null,
+      board,
+    };
   }
 
-  async createRoom(data: Partial<Room>) {
-    return this.roomModel.create(data);
-  }
-
-  // Wrapper pour findOne avec conditions (utilisé pour le jumelage)
-  async findPlayerInRoom(roomId: string) {
-    return this.playerModel.findOne({ where: { roomId } });
-  }
-
-  // Wrappers de destruction
-  async destroyRoom(roomId: string) {
-    return this.roomModel.destroy({ where: { id: roomId } });
-  }
+  /**
+   * Réinitialise toute la base de données
+   */
   async resetAll() {
     await this.cellModel.destroy({ where: {} });
     await this.roomModel.destroy({ where: {} });
     await this.playerModel.destroy({ where: {} });
   }
 
-  // Wrapper pour debug
-  async getAllData() {
-    return {
-      players: await this.playerModel.findAll({ raw: true }),
-      rooms: await this.roomModel.findAll({ raw: true }),
-      cells: await this.cellModel.findAll({ raw: true }),
-    };
+  /**
+   * Récupère un joueur (Simple wrapper)
+   */
+  async getPlayer(playerId: string) {
+    return this.playerModel.findByPk(playerId);
   }
 
   // =================================================================
-  // LOGIQUE DE JEU (MIGRATION EXPRESS)
+  // LOGIQUE INTERNE (PRIVATE / HELPER)
   // =================================================================
 
-  /** Logique complexe de recherche d'une room avec 1 seul joueur */
-  async findRoomWithOnePlayer(): Promise<{
+  private async findRoomWithOnePlayer(): Promise<{
     roomId: string;
     playerCount: number;
   } | null> {
@@ -92,12 +207,57 @@ export class GameService {
       having: this.sequelize.literal('COUNT(roomId) = 1'),
       raw: true,
     });
-    // Casting nécessaire car Sequelize raw retourne un type générique
     return result as unknown as { roomId: string; playerCount: number } | null;
   }
 
-  /** Convertit les cellules DB en tableau 2D 6x7 */
-  async makeBoard(roomId: string): Promise<(PlayerColor | null)[][]> {
+  private async processMoveLogic(room: Room, player: Player, column: number) {
+    // 1. Jouer le jeton
+    const pos = await this.dropInColumn(
+      room.id,
+      column,
+      player.color as PlayerColor,
+    );
+    if (!pos) throw new BadRequestException('Column full'); // NestJS Exception directe
+
+    // 2. Vérifier victoire
+    const board = await this.makeBoard(room.id);
+    const won = this.checkWinner(
+      board,
+      pos.row,
+      pos.col,
+      player.color as PlayerColor,
+    );
+
+    // 3. Mise à jour Room
+    if (won) {
+      room.status = GameStatus.ENDED;
+      room.winnerPlayerId = player.id;
+      this.notifyGameEnded(room.id).catch((err) => this.logger.error(err));
+    } else {
+      room.turn =
+        (room.turn as PlayerColor) === PlayerColor.YELLOW
+          ? PlayerColor.RED
+          : PlayerColor.YELLOW;
+      room.status = GameStatus.PLAYING;
+    }
+    await room.save();
+
+    // 4. Notification
+    const payload: GamePayload = {
+      roomId: room.id,
+      board,
+      turn: room.turn as PlayerColor,
+      status: room.status as GameStatus,
+      winner: room.winnerPlayerId ? player.name : null,
+    };
+
+    // WebSocket Emit
+    this.gameGateway.emitBoardUpdate(room.id, payload);
+
+    return { success: true };
+  }
+
+  private async makeBoard(roomId: string): Promise<(PlayerColor | null)[][]> {
     const cells = await this.cellModel.findAll({ where: { roomId } });
     const board: (PlayerColor | null)[][] = Array.from({ length: 6 }, () =>
       Array.from({ length: 7 }, () => null),
@@ -111,28 +271,27 @@ export class GameService {
     return board;
   }
 
-  /** Gère la gravité et l'insertion du jeton */
-  async dropInColumn(roomId: string, column: number, color: PlayerColor) {
+  private async dropInColumn(
+    roomId: string,
+    column: number,
+    color: PlayerColor,
+  ) {
     const tokensInColumn = await this.cellModel.count({
       where: { roomId, col: column },
     });
+    if (tokensInColumn >= 6) return null;
 
-    if (tokensInColumn >= 6) return null; // Colonne pleine
-
-    const row = 5 - tokensInColumn; // Gravité: 5 = bas, 0 = haut
-
+    const row = 5 - tokensInColumn;
     const cell = await this.cellModel.create({
       row,
       col: column,
       color,
       roomId,
     });
-
     return { row: cell.row, col: cell.col };
   }
 
-  /** Algorithme de victoire (4 directions) */
-  checkWinner(
+  private checkWinner(
     board: (PlayerColor | null)[][],
     r: number,
     c: number,
@@ -141,27 +300,39 @@ export class GameService {
     const R = 6;
     const C = 7;
     const directions = [
-      [0, 1], // Horizontal
-      [1, 0], // Vertical
-      [1, 1], // Diag Bas-Droite
-      [1, -1], // Diag Bas-Gauche
+      [0, 1],
+      [1, 0],
+      [1, 1],
+      [1, -1],
     ];
 
     for (const [dr, dc] of directions) {
       let count = 1;
-      // Sens positif
       for (let i = 1; i < 4; i++) {
         const nr = r + dr * i;
         const nc = c + dc * i;
-        if (nr >= 0 && nr < R && nc >= 0 && nc < C && board[nr][nc] === color)
+        if (
+          nr >= 0 &&
+          nr < R &&
+          nc >= 0 &&
+          nc < C &&
+          board[nr][nc] !== null &&
+          board[nr][nc] === color
+        )
           count++;
         else break;
       }
-      // Sens négatif
       for (let i = 1; i < 4; i++) {
         const nr = r - dr * i;
         const nc = c - dc * i;
-        if (nr >= 0 && nr < R && nc >= 0 && nc < C && board[nr][nc] === color)
+        if (
+          nr >= 0 &&
+          nr < R &&
+          nc >= 0 &&
+          nc < C &&
+          board[nr][nc] !== null &&
+          board[nr][nc] === color
+        )
           count++;
         else break;
       }
@@ -170,124 +341,30 @@ export class GameService {
     return false;
   }
 
-  /** Orchestre le coup, la victoire et la notification WebSocket */
-  async processMove(room: Room, player: Player, column: number) {
-    // 1. Jouer le coup
-    const pos = await this.dropInColumn(
-      room.id,
-      column,
-      player.color as PlayerColor,
-    );
-    if (!pos) throw new Error('Column full');
-
-    // 2. Analyser le plateau
-    const board = await this.makeBoard(room.id);
-    const won = this.checkWinner(
-      board,
-      pos.row,
-      pos.col,
-      player.color as PlayerColor,
-    );
-
-    // 3. Mettre à jour la Room
-    if (won) {
-      room.status = GameStatus.ENDED;
-      room.winnerPlayerId = player.id; // On stocke l'ID
-      // Note: notifyGameEnded était juste un log ou un emit dans Express
-      await this.notifyGameEnded(room.id);
-      this.logger.log(`Game ${room.id} ended. Winner: ${player.name}`);
-    } else {
-      room.turn =
-        (room.turn as PlayerColor) === PlayerColor.YELLOW
-          ? PlayerColor.RED
-          : PlayerColor.YELLOW;
-      room.status = GameStatus.PLAYING;
-    }
-    await room.save();
-
-    // 4. Préparer le payload
-    const payload: GamePayload = {
-      roomId: room.id,
-      board,
-      turn: room.turn as PlayerColor,
-      status: room.status as GameStatus,
-      // Express envoyait 'player.name' si gagnant, sinon null
-      winner: room.winnerPlayerId ? player.name : null,
-    };
-
-    // 5. Notifier via Gateway
-    this.gameGateway.emitBoardUpdate(room.id, payload);
-
-    return payload;
-  }
-
-  /**
-   * Récupère l'état complet d'une room au format ISO pour le client.
-   * Remplace la route Express router.get("/room/:id").
-   */
-  async getRoomIso(roomId: string) {
-    // 1. Récupération DB (inclut la relation winnerPlayer pour avoir le nom)
-    const room = await this.roomModel.findByPk(roomId, {
-      include: [
-        {
-          model: this.playerModel,
-          as: 'winnerPlayer', // Ton alias défini dans Room
-          attributes: ['id', 'name', 'color'],
-        },
-      ],
-    });
-
-    if (!room) return null;
-
-    // 2. Logique makeBoard
-    const board = await this.makeBoard(room.id);
-
-    // 3. Formatage ISO (identique à ton res.json Express)
-    return {
-      id: room.id,
-      turn: room.turn,
-      status: room.status,
-      // Utilisation de winnerPlayer pour accéder au nom, sinon null
-      winner: room.winnerPlayer ? room.winnerPlayer.name : null,
-      board,
-    };
-  }
-
-  /**
-   * Envoie un message à RabbitMQ pour indiquer qu'un PDF doit être capturé.
-   * Remplace l'ancienne fonction utilitaire.
-   */
   async notifyGameEnded(roomId: string): Promise<void> {
-    const AMQP_URL = 'amqp://localhost'; // Déplacer ceci vers une variable d'environnement (.env) est conseillé
+    const AMQP_URL = 'amqp://localhost';
     const QUEUE_NAME = 'game_ended';
-
     try {
       const conn = await amqp.connect(AMQP_URL);
       const ch = await conn.createChannel();
-
-      // Assurer que la queue existe
       await ch.assertQueue(QUEUE_NAME, { durable: true });
-
-      const message = { roomId };
-
-      ch.sendToQueue(
-        QUEUE_NAME,
-        Buffer.from(JSON.stringify(message)),
-        { persistent: true }, // Message persistant
-      );
-
-      this.logger.log(
-        `[AMQP] Message for Room ${roomId} sent to queue '${QUEUE_NAME}'`,
-      );
-
+      ch.sendToQueue(QUEUE_NAME, Buffer.from(JSON.stringify({ roomId })), {
+        persistent: true,
+      });
+      this.logger.log(`[AMQP] Message for Room ${roomId} sent`);
       await ch.close();
       await conn.close();
     } catch (error) {
-      this.logger.error(
-        `[AMQP] Failed to connect or send message for Room ${roomId}`,
-        error,
-      );
-      // Important: Le reste du jeu ne doit pas s'arrêter si RabbitMQ est hors ligne
+      this.logger.error(`[AMQP] Error`, error);
     }
+  }
+
+  // Debug Helper
+  async getAllData() {
+    return {
+      players: await this.playerModel.findAll({ raw: true }),
+      rooms: await this.roomModel.findAll({ raw: true }),
+      cells: await this.cellModel.findAll({ raw: true }),
+    };
   }
 }
