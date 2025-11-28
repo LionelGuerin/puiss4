@@ -1,8 +1,8 @@
 import { IsString, IsNotEmpty, IsUUID, IsInt, Min, Max } from 'class-validator';
 
 export class MakeMoveDto {
-  @IsString()
-  @IsNotEmpty()
+  @IsString({ message: 'roomId doit être une chaîne de caractères.' })
+  @IsNotEmpty({ message: 'roomId est obligatoire.' })
   @IsUUID('4', { message: 'roomId doit être un UUID valide.' })
   roomId: string;
 

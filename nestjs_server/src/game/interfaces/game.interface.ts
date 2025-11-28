@@ -17,9 +17,9 @@ export interface RequestWithPlayer extends Request {
   playerId?: string;
 }
 
-// 3. Payload envoyé via WebSocket
+// 3. Payload envoyé via WebSocket + API room/:id
 export interface GamePayload {
-  roomId: string;
+  id: string;
   board: (PlayerColor | null)[][];
   turn: PlayerColor;
   status: GameStatus;

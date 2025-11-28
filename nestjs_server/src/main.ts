@@ -13,6 +13,9 @@ async function bootstrap() {
       whitelist: true, // Retire automatiquement les propriétés non décorées (sécurité)
       forbidNonWhitelisted: true, // Renvoie une erreur si on envoie des champs inconnus
       transform: true, // Transforme automatiquement les payloads en instances de DTO
+      transformOptions: {
+        enableImplicitConversion: true, // <--- Permet de convertir "3" en 3 automatiquement
+      },
     }),
   );
 

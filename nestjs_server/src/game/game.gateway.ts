@@ -9,7 +9,7 @@ import {
 import { Server, Socket } from 'socket.io'; // Utilisation des types Socket.IO
 import { Logger } from '@nestjs/common';
 
-// Note: On utilise le port par défaut (3000) et le chemin racine (/)
+// Note: On utilise le port par défaut (4000) et le chemin racine (/)
 @WebSocketGateway({
   cors: {
     origin: '*',

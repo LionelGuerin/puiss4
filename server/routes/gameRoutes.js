@@ -1,45 +1,29 @@
 import express from "express";
-import {
-  Player
-} from "../models/Player.js";
-import {
-  Room
-} from "../models/Room.js";
-import {
-  Cell
-} from "../models/Cell.js";
-import {
-  makeBoard,
-  dropInColumn,
-  checkWinner,
-  notifyGameEnded
-} from "../services/gameService.js";
-import {
-  Op,
-  Sequelize
-} from "sequelize";
-import {
-  v4 as uuidv4
-} from "uuid";
+import { Player } from "../models/Player.js";
+import { Room } from "../models/Room.js";
+import { Cell } from "../models/Cell.js";
+import { makeBoard, dropInColumn, checkWinner, notifyGameEnded } from "../services/gameService.js";
+import { Op, Sequelize } from "sequelize";
+import { v4 as uuidv4 } from "uuid";
 
 export default function (io) {
   const router = express.Router();
 
   router.post("/start", async (req, res) => {
-    const {
-      name
-    } = req.body;
-    if (!name || name.trim() === "") return res.status(400).json({
-      error: "Name required"
-    });
+    const { name } = req.body;
+    if (!name || name.trim() === "")
+      return res.status(400).json({
+        error: "Name required"
+      });
 
     let player = await Player.findByPk(req.playerId);
-    if (!player) player = await Player.create({
-      id: req.playerId,
-      name,
-      color: null,
-      roomId: null
-    });
+    if (!player)
+      player = await Player.create({
+        id: req.playerId,
+        name,
+        color: null,
+        roomId: null
+      });
     else {
       player.name = name;
       await player.save();
@@ -60,18 +44,15 @@ export default function (io) {
     }
 
     const roomEntry = await Player.findOne({
-      attributes: [
-        "roomId",
-        [Sequelize.fn("COUNT", Sequelize.col("roomId")), "playerCount"],
-      ],
+      attributes: ["roomId", [Sequelize.fn("COUNT", Sequelize.col("roomId")), "playerCount"]],
       where: {
         roomId: {
-          [Op.not]: null,
-        },
+          [Op.not]: null
+        }
       },
       group: ["roomId"],
       having: Sequelize.literal("COUNT(roomId) = 1"),
-      raw: true,
+      raw: true
     });
     const roomWithOnePlayerId = (roomEntry && roomEntry.roomId) || null;
 
@@ -108,36 +89,38 @@ export default function (io) {
       await room.save();
       return res.json({
         roomId: room.id,
-        color: player.color,
+        color: player.color
       });
     }
   });
 
   router.post("/move", async (req, res) => {
     try {
-      const {
-        roomId,
-        column
-      } = req.body;
+      const { roomId, column } = req.body;
       const player = await Player.findByPk(req.playerId);
-      if (!player || !player.roomId || player.roomId !== roomId) return res.status(400).json({
-        error: "Not in room"
-      });
+      if (!player || !player.roomId || player.roomId !== roomId)
+        return res.status(400).json({
+          error: "Not in room"
+        });
       const room = await Room.findByPk(roomId);
-      if (!room) return res.status(404).json({
-        error: "Room not found"
-      });
-      if (room.status === "ENDED") return res.status(400).json({
-        error: "Ended"
-      });
-      if (player.color !== room.turn) return res.status(400).json({
-        error: "Not your turn"
-      });
+      if (!room)
+        return res.status(404).json({
+          error: "Room not found"
+        });
+      if (room.status === "ENDED")
+        return res.status(400).json({
+          error: "Ended"
+        });
+      if (player.color !== room.turn)
+        return res.status(400).json({
+          error: "Not your turn"
+        });
 
       const pos = await dropInColumn(roomId, column, player.color);
-      if (!pos) return res.status(400).json({
-        error: "Column full"
-      });
+      if (!pos)
+        return res.status(400).json({
+          error: "Column full"
+        });
 
       const board = await makeBoard(roomId);
       const won = await checkWinner(board, pos.row, pos.col, player.color);
@@ -152,7 +135,7 @@ export default function (io) {
       await room.save();
 
       const payload = {
-        roomId,
+        id: roomId,
         board,
         turn: room.turn,
         status: room.status,
@@ -220,17 +203,26 @@ export default function (io) {
           <h2>Players</h2>
           <table>
             <tr><th>id</th><th>color</th><th>roomId</th></tr>
-            ${players.map(p => `<tr><td>${p.id}</td><td>${p.color||''}</td><td>${p.roomId||''}</td></tr>`).join('')}
+            ${players.map(p => `<tr><td>${p.id}</td><td>${p.color || ""}</td><td>${p.roomId || ""}</td></tr>`).join("")}
           </table>
           <h2>Rooms</h2>
           <table>
             <tr><th>id</th><th>turn</th><th>status</th><th>winner</th></tr>
-            ${rooms.map(r => `<tr><td>${r.id}</td><td>${r.turn||''}</td><td>${r.status}</td><td>${r.winnerPlayerId||''}</td></tr>`).join('')}
+            ${rooms
+              .map(
+                r =>
+                  `<tr><td>${r.id}</td><td>${r.turn || ""}</td><td>${r.status}</td><td>${
+                    r.winnerPlayerId || ""
+                  }</td></tr>`
+              )
+              .join("")}
           </table>
           <h2>Cells</h2>
           <table>
             <tr><th>roomId</th><th>row</th><th>col</th><th>color</th></tr>
-            ${cells.map(c => `<tr><td>${c.roomId}</td><td>${c.row}</td><td>${c.col}</td><td>${c.color}</td></tr>`).join('')}
+            ${cells
+              .map(c => `<tr><td>${c.roomId}</td><td>${c.row}</td><td>${c.col}</td><td>${c.color}</td></tr>`)
+              .join("")}
           </table>
         </body>
       </html>
@@ -239,4 +231,4 @@ export default function (io) {
   });
 
   return router;
-};
+}

@@ -162,7 +162,7 @@ export class GameService {
     const board = await this.makeBoard(room.id);
 
     return {
-      roomId: room.id,
+      id: room.id,
       turn: room.turn as PlayerColor,
       status: room.status as GameStatus,
       winner: room.winnerPlayer ? room.winnerPlayer.name : null,
@@ -244,7 +244,7 @@ export class GameService {
 
     // 4. Notification
     const payload: GamePayload = {
-      roomId: room.id,
+      id: room.id,
       board,
       turn: room.turn as PlayerColor,
       status: room.status as GameStatus,

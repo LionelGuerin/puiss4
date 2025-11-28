@@ -3,22 +3,26 @@ import {
   Post,
   Body,
   Get,
-  Req,
   Res,
   HttpStatus,
   HttpException,
   Param,
+  UseGuards,
 } from '@nestjs/common';
-import { GameService } from './game.service';
-import type { RequestWithPlayer } from './interfaces/game.interface';
-import { v4 as uuidv4 } from 'uuid';
 import type { Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
+
+import { GameService } from './game.service';
 
 // DTOs
 import { StartGameDto } from './dto/start-game.dto';
 import { MakeMoveDto } from './dto/make-move.dto';
 
-// Modèles (Nécessaires pour le typage dans le HTML de debug)
+// Outils Architecture (Guard & Decorator)
+import { PlayerGuard } from './guards/player.guard';
+import { PlayerId } from './decorators/player-id.decorator';
+
+// Modèles (Pour le HTML de debug)
 import { Player } from './models/player.model';
 import { Room } from './models/room.model';
 import { Cell } from './models/cell.model';
@@ -31,31 +35,32 @@ export class GameController {
   // ROUTE POST /start
   // ----------------------------------------------------------------------
   @Post('start')
-  async start(@Body() dto: StartGameDto, @Req() req: RequestWithPlayer) {
-    const playerId = req.playerId || uuidv4();
-    // Toute la logique de création/join est déléguée au service
-    return this.gameService.startGame(playerId, dto.name);
+  // Pas de PlayerGuard ici car c'est la seule route accessible sans ID (création)
+  async start(
+    @Body() dto: StartGameDto,
+    @PlayerId() playerId: string | undefined,
+  ) {
+    // Si pas d'ID (nouveau joueur), on en génère un
+    const id = playerId || uuidv4();
+    return this.gameService.startGame(id, dto.name);
   }
 
   // ----------------------------------------------------------------------
   // ROUTE POST /move
   // ----------------------------------------------------------------------
   @Post('move')
-  async move(@Body() dto: MakeMoveDto, @Req() req: RequestWithPlayer) {
-    const playerId = req.playerId;
-    if (!playerId) {
-      throw new HttpException(
-        { error: 'Player ID missing' },
-        HttpStatus.UNAUTHORIZED,
-      );
-    }
-
+  @UseGuards(PlayerGuard) // Bloque automatiquement si pas d'ID
+  async move(@Body() dto: MakeMoveDto, @PlayerId() playerId: string) {
     try {
-      // Le service gère les vérifications (Room, Tour, Victoire)
+      // playerId est garanti d'être une string grâce au Guard
       await this.gameService.makeMove(playerId, dto.roomId, dto.column);
       return { success: true };
     } catch (err: any) {
+      console.log('❌ ERREUR MOVE:', err);
+      console.log('📥 DTO REÇU:', dto);
+      console.log('👤 JOUEUR:', playerId);
       // On laisse passer les exceptions HTTP NestJS (BadRequest, NotFound...)
+      // levées par le Service
       if (err instanceof HttpException) throw err;
 
       console.error(err);
@@ -79,14 +84,8 @@ export class GameController {
   // ROUTE GET /me
   // ----------------------------------------------------------------------
   @Get('me')
-  async getMe(@Req() req: RequestWithPlayer) {
-    const playerId = req.playerId;
-    if (!playerId)
-      throw new HttpException(
-        { error: 'Unauthorized' },
-        HttpStatus.UNAUTHORIZED,
-      );
-
+  @UseGuards(PlayerGuard)
+  async getMe(@PlayerId() playerId: string) {
     const p = await this.gameService.getPlayer(playerId);
 
     if (!p) return { id: playerId, exists: false };
@@ -122,7 +121,6 @@ export class GameController {
   async debugHtml(@Res() res: Response) {
     const data = await this.gameService.getAllData();
 
-    // Votre HTML exact
     const html = `
      <html>
         <head>
