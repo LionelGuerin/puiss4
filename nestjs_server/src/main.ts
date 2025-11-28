@@ -1,20 +1,31 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { IoAdapter } from '@nestjs/platform-socket.io';
-import { ValidationPipe } from '@nestjs/common'; // <--- IMPORT
+import { ValidationPipe, BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // 1. Activation de la validation automatique pour tous les DTOs
+  // Récupération du service de config pour lire le PORT et l'URL FRONTEND
+  const configService = app.get(ConfigService);
+  const port = configService.get<number>('PORT') || 4000;
+  const frontendUrl =
+    configService.get<string>('FRONTEND_URL') || 'http://localhost:5173';
+
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true, // Retire automatiquement les propriétés non décorées (sécurité)
-      forbidNonWhitelisted: true, // Renvoie une erreur si on envoie des champs inconnus
-      transform: true, // Transforme automatiquement les payloads en instances de DTO
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
       transformOptions: {
-        enableImplicitConversion: true, // <--- Permet de convertir "3" en 3 automatiquement
+        enableImplicitConversion: true,
+      },
+      exceptionFactory: (errors) => {
+        console.error('ERREUR DE VALIDATION DÉTECTÉE :');
+        console.error(JSON.stringify(errors, null, 2));
+        return new BadRequestException(errors);
       },
     }),
   );
@@ -22,13 +33,15 @@ async function bootstrap() {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-call
   app.use(cookieParser());
 
+  // Utilisation de la variable d'env pour CORS
   app.enableCors({
-    origin: '*', // <--- Remplace par l'URL de ton FRONTEND (ex: 3001, 8080)
-    credentials: true, // <--- OBLIGATOIRE pour accepter les cookies
+    origin: frontendUrl,
+    credentials: true,
   });
 
   app.useWebSocketAdapter(new IoAdapter(app));
 
-  await app.listen(4000);
+  await app.listen(port);
+  console.log(`Server running on port ${port}`);
 }
 void bootstrap();

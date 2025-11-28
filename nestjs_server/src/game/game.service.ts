@@ -6,6 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
+import { ConfigService } from '@nestjs/config'; // <--- AJOUT
 import { Room } from './models/room.model';
 import { Player } from './models/player.model';
 import { Cell } from './models/cell.model';
@@ -30,6 +31,7 @@ export class GameService {
     @InjectModel(Cell) private cellModel: typeof Cell,
     @Inject(Sequelize) private sequelize: Sequelize,
     private gameGateway: GameGateway,
+    private configService: ConfigService, // <--- INJECTION DE LA CONFIG
   ) {}
 
   // =================================================================
@@ -342,8 +344,12 @@ export class GameService {
   }
 
   async notifyGameEnded(roomId: string): Promise<void> {
-    const AMQP_URL = 'amqp://localhost';
-    const QUEUE_NAME = 'game_ended';
+    // UTILISATION DE LA CONFIGURATION (Plus de valeurs en dur)
+    const AMQP_URL =
+      this.configService.get<string>('AMQP_URL') || 'amqp://localhost';
+    const QUEUE_NAME =
+      this.configService.get<string>('AMQP_QUEUE') || 'game_ended';
+
     try {
       const conn = await amqp.connect(AMQP_URL);
       const ch = await conn.createChannel();
