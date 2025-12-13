@@ -70,6 +70,7 @@ export default class GameService {
 
       player.roomId = room.id
       player.color = PlayerColor.YELLOW
+      console.log('NOUVELLE ROOM:', room.id, 'pour le joueur', player.id)
       await player.save()
 
       return {

@@ -12,6 +12,8 @@ export default class Player extends BaseModel {
   @column({ isPrimary: true })
   declare id: string
 
+  public static selfAssignPrimaryKey = true
+
   @column()
   declare name: string
 

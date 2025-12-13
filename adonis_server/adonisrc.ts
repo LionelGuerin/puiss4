@@ -5,11 +5,6 @@ export default defineConfig({
   |--------------------------------------------------------------------------
   | Experimental flags
   |--------------------------------------------------------------------------
-  |
-  | The following features will be enabled by default in the next major release
-  | of AdonisJS. You can opt into them today to avoid any breaking changes
-  | during upgrade.
-  |
   */
   experimental: {
     mergeMultipartFieldsAndFiles: true,
@@ -20,10 +15,6 @@ export default defineConfig({
   |--------------------------------------------------------------------------
   | Commands
   |--------------------------------------------------------------------------
-  |
-  | List of ace commands to register from packages. The application commands
-  | will be scanned automatically from the "./commands" directory.
-  |
   */
   commands: [
     () => import('@adonisjs/core/commands'),
@@ -35,10 +26,6 @@ export default defineConfig({
   |--------------------------------------------------------------------------
   | Service providers
   |--------------------------------------------------------------------------
-  |
-  | List of service providers to import and register when booting the
-  | application
-  |
   */
   providers: [
     () => import('@adonisjs/core/providers/app_provider'),
@@ -51,6 +38,7 @@ export default defineConfig({
     () => import('@adonisjs/cors/cors_provider'),
     () => import('@adonisjs/lucid/database_provider'),
     () => import('@adonisjs/session/session_provider'),
+    () => import('@adonisjs/transmit/transmit_provider'),
     () => import('@adonisjs/auth/auth_provider'),
   ],
 
@@ -58,9 +46,6 @@ export default defineConfig({
   |--------------------------------------------------------------------------
   | Preloads
   |--------------------------------------------------------------------------
-  |
-  | List of modules to import before starting the application.
-  |
   */
   preloads: [() => import('#start/routes'), () => import('#start/kernel')],
 
@@ -68,10 +53,6 @@ export default defineConfig({
   |--------------------------------------------------------------------------
   | Tests
   |--------------------------------------------------------------------------
-  |
-  | List of test suites to organize tests by their type. Feel free to remove
-  | and add additional suites.
-  |
   */
   tests: {
     suites: [

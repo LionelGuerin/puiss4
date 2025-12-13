@@ -15,6 +15,8 @@ export default class Room extends BaseModel {
   @column({ isPrimary: true })
   declare id: string
 
+  public static selfAssignPrimaryKey = true
+
   @column()
   declare turn: PlayerColor
 
