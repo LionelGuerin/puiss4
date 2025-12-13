@@ -5,13 +5,12 @@
   "type": "module",
   "license": "UNLICENSED",
   "scripts": {
-    "start": "node bin/server.js",
-    "build": "node ace build",
     "dev": "node ace serve --hmr",
-    "test": "node ace test",
-    "lint": "eslint .",
-    "format": "prettier --write .",
-    "typecheck": "tsc --noEmit"
+    "build": "node ace build",
+    "start": "node build/bin/server.js",
+    "migration:run": "node ace migration:run",
+    "migration:rollback": "node ace migration:rollback",
+    "migration:fresh": "node ace migration:fresh"
   },
   "imports": {
     "#controllers/*": "./app/controllers/*.js",
@@ -33,8 +32,11 @@
   },
   "devDependencies": {
     "@adonisjs/assembler": "^7.8.2",
+    "@adonisjs/core": "^6.19.1",
+    "@adonisjs/cors": "^2.2.1",
     "@adonisjs/eslint-config": "^2.0.0",
     "@adonisjs/prettier-config": "^1.4.4",
+    "@adonisjs/static": "^1.1.1",
     "@adonisjs/tsconfig": "^1.4.0",
     "@japa/api-client": "^3.1.0",
     "@japa/assert": "^4.0.1",
@@ -54,8 +56,6 @@
   },
   "dependencies": {
     "@adonisjs/auth": "^9.4.0",
-    "@adonisjs/core": "^6.18.0",
-    "@adonisjs/cors": "^2.2.1",
     "@adonisjs/lucid": "^21.6.1",
     "@adonisjs/session": "^7.6.0",
     "@adonisjs/transmit": "^2.0.2",
