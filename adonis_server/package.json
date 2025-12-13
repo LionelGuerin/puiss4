@@ -58,12 +58,12 @@
     "@adonisjs/auth": "^9.4.0",
     "@adonisjs/lucid": "^21.6.1",
     "@adonisjs/session": "^7.6.0",
-    "@adonisjs/transmit": "^2.0.2",
     "@vinejs/vine": "^3.0.1",
     "amqplib": "^0.10.9",
     "better-sqlite3": "^12.5.0",
     "luxon": "^3.7.2",
     "reflect-metadata": "^0.2.2",
+    "socket.io": "^4.8.1",
     "uuid": "^13.0.0"
   },
   "hotHook": {

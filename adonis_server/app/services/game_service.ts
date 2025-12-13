@@ -6,7 +6,7 @@ import db from '@adonisjs/lucid/services/db'
 import * as amqp from 'amqplib'
 import env from '#start/env'
 import logger from '@adonisjs/core/services/logger'
-import transmit from '@adonisjs/transmit/services/main'
+import Ws from '#services/ws'
 
 export interface GamePayload {
   [key: string]: any
@@ -221,7 +221,8 @@ export default class GameService {
 
     // WebSocket Emit via Transmit
     console.log('Emitting board update to room:', room.id, payload)
-    transmit.broadcast(`room/${room.id}/board_update`, JSON.parse(JSON.stringify(payload)))
+    //transmit.broadcast(`room/${room.id}/board_update`, JSON.parse(JSON.stringify(payload)))
+    Ws.emitBoardUpdate(room.id, payload)
 
     return { success: true }
   }

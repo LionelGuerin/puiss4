@@ -1,6 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import PdfService from '#services/pdf_service'
-import transmit from '@adonisjs/transmit/services/main'
+import Ws from '#services/ws'
 
 export default class PdfController {
   private pdfService = new PdfService()
@@ -27,7 +27,8 @@ export default class PdfController {
     console.log('PDF ready for room:', roomId)
 
     // Émettre via Transmit
-    transmit.broadcast(`room/${roomId}/pdf_ready`, JSON.parse(JSON.stringify({ roomId })))
+    //transmit.broadcast(`room/${roomId}/pdf_ready`, JSON.parse(JSON.stringify({ roomId })))
+    Ws.emitPdfReady(roomId)
 
     return response.noContent()
   }
