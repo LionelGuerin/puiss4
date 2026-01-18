@@ -1,14 +1,24 @@
-import React from "react";
+// src/components/Board/Board.tsx
+import type { Board as BoardType, Room } from "../../types";
 import "./Board.css";
+
+interface BoardProps {
+  board: BoardType;
+  onPlay?: (col: number) => void;
+  disabled?: boolean;
+  specmode?: boolean;
+  room?: Room | null;
+  pdfReady?: boolean;
+}
 
 export default function Board({
   board,
   onPlay,
-  disabled,
-  specmode,
+  disabled = false,
+  specmode = false,
   room,
-  pdfReady,
-}) {
+  pdfReady = false,
+}: BoardProps) {
   const handleDownload = async () => {
     if (!room?.id) return;
 
